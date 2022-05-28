@@ -1,48 +1,59 @@
-const colors = require("colors/safe");
+const EventEmitter = require("events");
 
-const isPrime = (number) => {
-    if (number < 2) return false;
+const emitter = new EventEmitter();
+const input = process.argv[2];
+const inputSplit = input.split("-");
 
-    for (let i = 2; i <= number / 2; i++) {
-        if(number % i === 0) return false;
-    }
-    return true;
-}
+const hourInput = inputSplit[0];
+const dayInput = inputSplit[1];
+const monthInput = inputSplit[2];
+const yearInput = inputSplit[3];
 
-const from = process.argv[2];
-const to = process.argv[3];
-let count = 1;
-let primeCount = 0;
+const countDown = new Date(
+  yearInput,
+  monthInput - 1,
+  dayInput,
+  hourInput,
+  0,
+  0
+).getTime();
 
-console.log(typeof(to));
+const interval = () => {
+  if (
+    isFinite(hourInput) &&
+    isFinite(monthInput) &&
+    isFinite(dayInput) &&
+    isFinite(yearInput)
+  ) {
+    intervalId = setInterval(() => {
+      const today = new Date().getTime();
 
-for (let number = from; number <= to; number++) {
+      let distance = countDown - today;
 
-    let colorer = colors.green;
-// все инпуты принимаются за тип string
-    if (typeof number !== "number" || typeof to !== "number") {
-        colorer = colors.red;
-        console.log(colorer("Input is not a number"))
-        primeCount ++
-        break
-    }
+      if (distance < 0) {
+        console.log("Время указано неверно");
+        return clearInterval(intervalId);
+      }
+      if (distance === 0) {
+        console.log("таймер завершен");
+        return clearInterval(intervalId);
+      }
+      let days = Math.floor(distance / (1000 * 60 * 60 * 24));
+      let hours = Math.floor(
+        (distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+      );
+      let minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+      let seconds = Math.floor((distance % (1000 * 60)) / 1000);
 
-    if (isPrime(number)) {
-        primeCount ++;
-        if (count % 2 === 0) {
-            colorer = colors.yellow;
-            count += 1;
-        } else if ( count % 3 === 0) {
-            colorer = colors.red;
-            count = 1;
-        } else {
-            count += 1;
-        }
-        console.log(colorer(number));
-    } 
-}
+      console.log(
+        `осталось Дней:${days} Часов:${hours} Минут:${minutes} Cекунд:${seconds}`
+      );
+    }, 1000);
+  } else {
+    console.log("Формат не верный");
+  }
+};
 
-if (primeCount === 0 ) {
-    colorer = colors.red
-    console.log(colorer("Error no prime numbers in the current interval"))
-}
+emitter.on("timer", () => interval());
+
+emitter.emit("timer");
