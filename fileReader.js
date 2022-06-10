@@ -1,78 +1,66 @@
-#!/usr/bin/env node
-
-const fs = require("fs");
+const http = require("http");
 const path = require("path");
-const inquirer = require("inquirer");
+const fs = require("fs");
 
-const currentDirectory = process.cwd();
+const HTML = fs.readFileSync("./index.html", "utf-8");
 
-const isFile = (fileName) => {
-  return fs.lstatSync(fileName).isFile();
+const promisifyFs =
+  (method, error, callback = (data) => data) =>
+  (path) =>
+    new Promise((resolve, reject) => {
+      fs[method](path, (err, data) => {
+        if (err) {
+          return reject(error);
+        }
+        resolve(callback(data));
+      });
+    });
+
+const readFile = promisifyFs("readFile", "Error when read file");
+const readdir = promisifyFs("readdir", "Error when read dir");
+const isFile = promisifyFs("lstat", "Error when read dir or file", (stats) =>
+  stats.isFile()
+);
+
+const generateHTMLContent = async (dir, path) => {
+  dirName = dir === "/" ? "" : dir + "/";
+  const dirContent = await readdir(path);
+  const listContent = `
+    <ol>
+      ${dirContent
+        .map((item) => `<li><a href="${dirName + item}">${item}</a></li>`)
+        .join("\n")}
+    </ol>
+    `;
+
+  return HTML.replace("{{content}}", listContent);
 };
 
-const list = fs.readdirSync(currentDirectory).filter(isFile);
+const server = http.createServer(async (req, res) => {
+  try {
+    if (req.method === "GET") {
+      if (req.url === "/") {
+        const htmlContent = await generateHTMLContent("", __dirname);
+        return res.end(htmlContent);
+      }
 
-inquirer
-  .prompt([
-    {
-      name: "fileName",
-      type: "list",
-      message: "Choose file:",
-      choices: list,
-    },
-  ])
-  .then((answer) => {
-    console.log(answer.fileName);
-    const filePath = path.join(currentDirectory, answer.fileName);
+      const itemPath = path.join(__dirname, req.url);
+      const itemIsFile = await isFile(itemPath);
 
-    fs.readFile(filePath, "utf-8", (err, data) => {
-      console.log(data);
-    });
-  });
+      if (itemIsFile) {
+        const data = await readFile(itemPath);
+        return res.end(data);
+      }
 
-///////////////////////////////////////////// Asking question to read specific file
-// const yargs = require("yargs");
-// const readline = require("readline");
+      const htmlContent = await generateHTMLContent(req.url, itemPath);
+      return res.end(htmlContent);
+    }
+    res.writeHead(405, "Method not Allowed");
+    res.end();
+  } catch (e) {
+    res.writeHead(400, e);
+    res.end();
+  }
+});
 
-// const rl = readline.createInterface({
-//   input: process.stdin,
-//   output: process.stdout,
-// });
-
-// rl.question("Please enter the path to the file ", (inputedPath) => {
-//   const filePath = path.join(__dirname, inputedPath);
-
-//   fs.readFile(filePath, "utf8", (err, data) => {
-//     console.log(data);
-//     rl.close();
-//   });
-// });
-
-// rl.on("close", () => {
-//   process.exit(0);
-// });
-//////////////////////////////////////////////
-// const ip = ["89.123.1.41", "34.48.240.111"];
-
-// const readStream = fs.createReadStream("./access.log", "utf8");
-
-// const regs = [
-//   new RegExp(`^${ip[0]}` + ".*$", "gm"),
-//   new RegExp(`^${ip[1]}` + ".*$", "gm"),
-// ];
-
-// const outputs = [`./%${ip[0]}%_requests.log`, `./%${ip[1]}%_requests.log`];
-
-// const { Transform } = require("stream");
-
-// for (let i = 0; i < 2; i++) {
-//   const transformStream = new Transform({
-//     transform(chunk, encoding, callback) {
-//       const transformedChunk = chunk.toString().match(regs[i]).join("\n");
-//       callback(undefined, transformedChunk);
-//     },
-//   });
-
-//   const writeStream = fs.createWriteStream(outputs[i], "utf-8");
-//   readStream.pipe(transformStream).pipe(writeStream);
-// }
+server.listen(8085);
